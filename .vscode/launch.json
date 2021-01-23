@@ -1,0 +1,37 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug",
+			"type": "cppdbg",
+			"request": "launch",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceRoot}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "lldb",
+			"miDebuggerPath": "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-mi",
+			//"visualizerFile": "${workspaceFolder}/types.natvis",
+			//"setupCommands": [
+			//	{ "text": "directory ${workspaceFolder}", "description": "resolve paths", "ignoreFailures": true },
+			//],
+			//"showDisplayString": true,
+			"logging": { "engineLogging": false },
+			"program": "${workspaceFolder}/output/is_bjmm_server_busy",
+			"preLaunchTask": "build"
+		},
+		{
+			"name": "LLVM-alternative",
+			"type": "lldb-vscode",
+			"request": "launch",
+			"program": "${workspaceFolder}/output/is_bjmm_server_busy",
+			"args": [ "--log-file=Test.txt", "-vv" ],
+			"cwd": "${workspaceRoot}",
+			"env": [],
+			"stopOnEntry": false,
+			"debuggerRoot": "${workspaceRoot}",
+			"preLaunchTask": "build"
+		}
+	]
+}
