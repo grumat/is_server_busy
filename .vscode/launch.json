@@ -18,15 +18,15 @@
 			//],
 			//"showDisplayString": true,
 			"logging": { "engineLogging": false },
-			"program": "${workspaceFolder}/output/is_bjmm_server_busy",
+			"program": "${workspaceFolder}/output/is_server_busy",
 			"preLaunchTask": "build"
 		},
 		{
 			"name": "LLVM-alternative",
 			"type": "lldb-vscode",
 			"request": "launch",
-			"program": "${workspaceFolder}/output/is_bjmm_server_busy",
-			"args": [ "--log-file=Test.txt", "-vv" ],
+			"program": "${workspaceFolder}/output/is_server_busy",
+			"args": [ "--log-file=Test.txt", "-vv", "-c", "~/Documents/src/is_server_busy/conf/is_server_busy.conf" ],
 			"cwd": "${workspaceRoot}",
 			"env": [],
 			"stopOnEntry": false,

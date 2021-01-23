@@ -79,7 +79,7 @@ bool AnyConfig::Parse(const char *path)
 	FFile file(path, "r");
 	if(!file.IsValid())
 	{
-		Log(ERROR) << "Cannot open '" << path << "' configuration file!";
+		Log(ERROR) << "Cannot open '" << path << "' configuration file!\n";
 		return false;
 	}
 	size_t line_count = 0;
@@ -138,7 +138,7 @@ using namespace grumat;
 
 AppConfig::AppConfig()
 {
-	m_RecordFile = "/var/run/is_bjmm_server_busy.json";
+	m_RecordFile = "/opt/local/var/run/is_server_busy.json";
 	m_IntervalThr = 120;
 }
 
@@ -200,7 +200,8 @@ bool AppConfig::Parse(const char *path)
 				key.MakeUpper();
 				if(key == "HISTORY")
 				{
-					m_RecordFile = sect[i].value; 
+					m_RecordFile = sect[i].value.c_str();
+					m_RecordFile.MakeAbsolute();
 				}
 				else if(key == "MAX_INTERVAL")
 				{

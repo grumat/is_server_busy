@@ -1,8 +1,11 @@
 #include <string.h>
+#include <stdlib.h>
+#include <limits.h>
 #include <sys/proc_info.h>
 #include <libproc.h>
 #include <time.h>
 #include <unistd.h>
+#include <pwd.h>
 #include <iostream>
 #include <string>
 #include <vector>

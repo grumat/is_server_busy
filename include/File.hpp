@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Path.hpp"
+
 
 namespace grumat
 {
@@ -10,7 +12,9 @@ class FFile
 public:
 	FFile(const char *fname, const char *mode)
 	{
-		m_Handle = fopen(fname, mode);
+		Path fn(fname);
+		fn.MakeAbsolute();
+		m_Handle = fopen(fn.c_str(), mode);
 	}
 	~FFile()
 	{

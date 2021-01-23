@@ -8,14 +8,20 @@ namespace grumat
 class Path : public std::string
 {
 public:
-	Path(const char *path) : std::string(path) {}
+	Path() : std::string() { }
+	Path(const char *path) : std::string() { if (path != NULL) std::string::operator=(path); }
 	Path(const Path &path) : std::string(path) {}
 	bool IsEmpty() const { return empty(); }
 	bool HasSlash() const { return !IsEmpty() && at(size()-1) == '/'; }
 	void AddSlash()
 	{
-		if(!HasSlash())
+		if(!IsEmpty() && !HasSlash())
 			std::string::append(1, '/');
+	}
+	void RemoveSlash()
+	{
+		if(HasSlash())
+			resize(length() - 1);
 	}
 	void StripToName()
 	{
@@ -51,6 +57,9 @@ public:
 		tmp.StripToDir();
 		return tmp;
 	}
+	void SetToCWD();
+	void SetToHome();
+	void MakeAbsolute();
 };
 
 

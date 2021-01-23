@@ -31,7 +31,7 @@ PCH 	:= $(INCLUDE)/StdInc.hpp
 PCH_OUT	:= $(PCH).gch
 
 ifeq ($(OS),Windows_NT)
-MAIN	:= is_bjmm_server_busy.exe
+MAIN	:= is_server_busy.exe
 SOURCEDIRS	:= $(SRC)
 INCLUDEDIRS	:= $(INCLUDE)
 LIBDIRS		:= $(LIB)
@@ -39,7 +39,7 @@ FIXPATH = $(subst /,\,$1)
 RM			:= del /q /f
 MD	:= mkdir
 else
-MAIN	:= is_bjmm_server_busy
+MAIN	:= is_server_busy
 SOURCEDIRS	:= $(shell find $(SRC) -type d)
 INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d) /opt/local/include
 LIBDIRS		:= $(shell find $(LIB) -type d) /opt/local/lib

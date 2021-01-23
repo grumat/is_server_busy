@@ -1,6 +1,7 @@
 #pragma once
 
 #include "String.hpp"
+#include "Path.hpp"
 
 
 namespace grumat
@@ -77,7 +78,7 @@ public:
 	size_t MatchName(const char *proc_name) const;
 
 public:
-	std::string m_RecordFile;
+	grumat::Path m_RecordFile;
 	size_t m_IntervalThr;
 	std::vector<ProcessConfig> m_Procs;
 
