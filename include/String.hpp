@@ -13,7 +13,7 @@ class String : public std::string
 public:
 	typedef std::string BASE;
 	String() : std::string() {}
-	String(const char *s) : std::string() { if(s != NULL) *this = s; }
+	String(const char *s) : std::string() { if(s != NULL) std::string::operator=(s); }
 	String(const char *s, size_t n) : std::string(s, n) {}
 	String(const std::string &s) : std::string(s) {}
 	~String() {}

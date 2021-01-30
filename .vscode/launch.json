@@ -26,7 +26,7 @@
 			"type": "lldb-vscode",
 			"request": "launch",
 			"program": "${workspaceFolder}/output/is_server_busy",
-			"args": [ "--log-file=Test.txt", "-vv", "-c", "~/Documents/src/is_server_busy/conf/is_server_busy.conf" ],
+			"args": [ "--log-file=Test.txt", "-vv", "-c", "~/Documents/src/is_server_busy/conf/is_server_busy.conf", "-L", "DEBUG"],
 			"cwd": "${workspaceRoot}",
 			"env": [],
 			"stopOnEntry": false,

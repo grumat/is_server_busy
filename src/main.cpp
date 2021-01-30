@@ -7,6 +7,11 @@
 using namespace PidSample;
 using namespace grumat;
 
+#define ACTIVE_STATE	0
+#define IDLE_STATE		1
+#define ERROR_STATE		100
+
+
 static int Usage(const char *argv0)
 {
 	Path path(argv0);
@@ -21,7 +26,7 @@ static int Usage(const char *argv0)
 			  << "    --log-file=<log-file> : Specifies a log file\n"
 			  << "    -L <level>            : Specifies the log level. Allowed values are ERROR,WARN,INFO or DEBUG.\n"
 			  << "    -v                    : Increase verbosity\n";
-	return 100;
+	return ERROR_STATE;
 }
 
 static bool NextArg(int &iArg, int argc, char *argv[])
@@ -97,19 +102,19 @@ int main(int argc, char *argv[])
 				else if ((rv = MatchCmd(pArg, "log-file", tmp)) != cmdMatch)
 				{
 					if (rv != cmdOk)
-						return 100;
+						return ERROR_STATE;
 					if (!log_file.empty())
 					{
 						std::cerr << "ERROR: A log file '" << log_file << "' was already specified!\n";
 						std::cerr << "       Don't know what to do with '" << argv[i] << "'...\n";
-						return 100;
+						return ERROR_STATE;
 					}
 					log_file = tmp;
 				}
 				else
 				{
 					std::cerr << "ERROR: Unknown switch '" << argv[i] << "'!\n";
-					return 100;
+					return ERROR_STATE;
 				}
 			}
 			else
@@ -122,7 +127,7 @@ int main(int argc, char *argv[])
 						if (iArg >= argc)
 						{
 							std::cerr << "ERROR: No configuration file specified for option '-c'!\n";
-							return 100;
+							return ERROR_STATE;
 						}
 						cfg = argv[iArg];
 						NextArg(iArg, argc, argv);
@@ -137,12 +142,12 @@ int main(int argc, char *argv[])
 								std::cerr << "       Don't know what to do with '-l " << argv[iArg] << "'...\n";
 							else
 								std::cerr << "       Don't know what to do with '-l'...\n";
-							return 100;
+							return ERROR_STATE;
 						}
 						if (iArg >= argc)
 						{
 							std::cerr << "ERROR: No log file name specified for option '-l'!\n";
-							return 100;
+							return ERROR_STATE;
 						}
 						log_file = argv[iArg];
 						NextArg(iArg, argc, argv);
@@ -155,12 +160,12 @@ int main(int argc, char *argv[])
 								std::cerr << "       Don't know what to do with '-L " << argv[iArg] << "'...\n";
 							else
 								std::cerr << "       Don't know what to do with '-L'...\n";
-							return 100;
+							return ERROR_STATE;
 						}
 						if (iArg >= argc)
 						{
 							std::cerr << "ERROR: No log level value specified for option '-l'!\n";
-							return 100;
+							return ERROR_STATE;
 						}
 						log_level = argv[iArg];
 						NextArg(iArg, argc, argv);
@@ -170,7 +175,7 @@ int main(int argc, char *argv[])
 						break;
 					default:
 						std::cerr << "ERROR: Unknown switch '" << argv[i] << "'!\n";
-						return 100;
+						return ERROR_STATE;
 					}
 				}
 			}
@@ -180,7 +185,7 @@ int main(int argc, char *argv[])
 		else if (iArg < argc)
 		{
 			std::cerr << "ERROR: No mean for '" << argv[iArg] << "'! Too many arguments...\n";
-			return 100;
+			return ERROR_STATE;
 		}
 	}
 
@@ -188,7 +193,7 @@ int main(int argc, char *argv[])
 	if (!log_file.empty() && !SetLogFile(log_file.c_str()))
 	{
 		std::cerr << "ERROR: opening log file '" << log_file << "'!\n";
-		return 100;
+		return ERROR_STATE;
 	}
 	if (!log_level.IsEmpty())
 	{
@@ -205,7 +210,7 @@ int main(int argc, char *argv[])
 		else
 		{
 			std::cerr << "ERROR: invalid log level specified: '" << log_level << "'!\n";
-			return 100;
+			return ERROR_STATE;
 		}
 		SetLogLevel(level);
 	}
@@ -217,7 +222,7 @@ int main(int argc, char *argv[])
 	Log(INFO) << "Started '" << argv[0] << "'\n";
 	AppConfig config;
 	if (!config.Parse(cfg.c_str()))
-		return 1;
+		return IDLE_STATE;
 
 	SampleSet old_samps;
 	LogDebug() << "Loading previous record\n";
@@ -245,20 +250,20 @@ int main(int argc, char *argv[])
 	{
 		// No process match, Server can shutdown
 		Log(INFO) << "No listed service was found. Server is allowed to shutdown...\n";
-		return 0;
+		return IDLE_STATE;
 	}
 	// Can't read history JSON file
 	if (!ok)
 	{
 		Log(WARN) << "Can't determine idle state. No history was found...\n";
-		return 1;
+		return ACTIVE_STATE;
 	}
 	// History timestamp is ascending?
 	LogDebug() << "Validating clock values: before: " << old_samps.m_Clock << "; after: " << samps.m_Clock << std::endl;
 	if (samps.m_Clock <= old_samps.m_Clock)
 	{
 		Log(WARN) << "Can't determine idle state. History timestamp is not ascending...\n";
-		return 1;
+		return ACTIVE_STATE;
 	}
 	// X s = X * 10ˆ9 ns
 	uint64_t time_diff = (samps.m_Clock - old_samps.m_Clock);
@@ -266,7 +271,7 @@ int main(int argc, char *argv[])
 	if (time_diff > (config.m_IntervalThr * 1000000000ULL))
 	{
 		Log(WARN) << "Can't determine idle state. History is more than " << config.m_IntervalThr << " s...\n";
-		return 1;
+		return ACTIVE_STATE;
 	}
 	LogDebug() << "Computing processes workload\n";
 	typedef std::map<size_t, Diff> DiffMap_t;
@@ -277,7 +282,7 @@ int main(int argc, char *argv[])
 		if (old_samps.m_Samples.count(it->first) == 0)
 		{
 			Log(INFO) << "New service arrived! Wait until next turn to check activity...\n";
-			return 1;
+			return ACTIVE_STATE;
 		}
 		const Sample &old = old_samps.m_Samples[it->first];
 		Diff dif = it->second - old;
@@ -296,7 +301,7 @@ int main(int argc, char *argv[])
 		if (cpu > pcfg.m_CPU)
 		{
 			Log(INFO) << "Service '" << pcfg.m_Name << "' is using " << format_n("%3.1f%%", cpu) << " CPU! Server activity confirmed...\n";
-			return 1;
+			return ACTIVE_STATE;
 		}
 		LogDebug() << "Service '" << pcfg.m_Name << "' is using " << format_n("%3.1f%%", cpu) << " CPU!\n";
 		//
@@ -304,10 +309,10 @@ int main(int argc, char *argv[])
 		if (bytes > (int64_t)pcfg.m_Disk)
 		{
 			Log(INFO) << "Service '" << pcfg.m_Name << "' transferred " << bytes << " Disk bytes! Server activity confirmed...\n";
-			return 1;
+			return ACTIVE_STATE;
 		}
 		LogDebug() << "Service '" << pcfg.m_Name << "' transferred " << bytes << " Disk bytes!\n";
 	}
 	Log(INFO) << "No listed service has significant workload. Server is allowed to shutdown...\n";
-	return 0;
+	return IDLE_STATE;
 }
