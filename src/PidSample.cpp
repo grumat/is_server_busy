@@ -1,6 +1,11 @@
 #include "StdInc.hpp"
 #include "PidSample.hpp"
 #include "Log.hpp"
+extern "C"
+{
+#include <sys/types.h>
+#include <sys/sysctl.h>
+}
 
 
 using namespace grumat;
@@ -32,9 +37,9 @@ Sample::Sample()
 }
 
 
-Sample::Sample(pid_t pid, const char *path)
+Sample::Sample(pid_t pid, const grumat::StringArray &cmd_line)
 	: m_Pid(pid)
-	, m_Path(path)
+	, m_Argv(cmd_line)
 	, m_CpuTime(0)
 	, m_SysTime(0)
 	, m_DiskReadBytes(0)
@@ -56,7 +61,7 @@ Sample::Sample(const Sample &o)
 	if(this != &o)
 	{
 		m_Pid = o.m_Pid;
-		m_Path = o.m_Path;
+		m_Argv = o.m_Argv;
 		m_CpuTime = o.m_CpuTime;
 		m_SysTime = o.m_SysTime;
 		m_DiskReadBytes = o.m_DiskReadBytes;
@@ -68,7 +73,7 @@ Sample::Sample(const Sample &o)
 void Sample::Print(std::ostream &strm, uint64_t tm_ticks) const
 {
 	strm << "Pid = " << m_Pid << '\n'
-		<< '\t' << "Path        = " << m_Path << std::endl
+		<< '\t' << "Path        = " << m_Argv[0] << std::endl
 		<< '\t' << "CPU Time    = " << m_CpuTime << " ticks\n"
 		<< '\t' << "Kernel Time = " << m_SysTime << " ticks\n"
 		<< '\t' << "Total Time  = " << std::fixed << std::setprecision(1) << std::setw(3) << GetRelativeTime(tm_ticks) << " %\n"
@@ -102,7 +107,10 @@ Diff Sample::operator -(const Sample &o) const
 void Sample::ToJson(Json::Value &obj) const
 {
 	obj["pid"] = Json::Value(m_Pid);
-	obj["Path"] = Json::Value(m_Path);
+	Json::Value arr(Json::arrayValue);
+	for(size_t i = 0; i < m_Argv.size(); ++i)
+		arr.append(m_Argv[i]);
+	obj["CmdLine"] = arr;
 	obj["CpuTime"] = Json::Value(m_CpuTime);
 	obj["SysTime"] = Json::Value(m_SysTime);
 	obj["DiskReadBytes"] = Json::Value(m_DiskReadBytes);
@@ -120,12 +128,15 @@ bool Sample::FromJson(const Json::Value &obj)
 	}
 	m_Pid = obj["pid"].asUInt();
 	// Path member
-	if(!obj.isMember("Path"))
+	if(!obj.isMember("CmdLine"))
 	{
-		Log(ERROR) << "Object PID:" << m_Pid << " has no 'Path' member!\n";
+		Log(ERROR) << "Object PID:" << m_Pid << " has no 'CmdLine' member!\n";
 		return false;
 	}
-	m_Path = obj["Path"].asCString();
+	const Json::Value &arr = obj["CmdLine"];
+	m_Argv.clear();
+	for(Json::Value::const_iterator it = arr.begin(); it != arr.end(); ++it)
+		m_Argv.push_back(it->asCString());
 	// CpuTime member
 	if(!obj.isMember("CpuTime"))
 	{
@@ -186,17 +197,168 @@ SampleSet::SampleSet(const AppConfig &config)
 		if (pids[i] == 0)
 			continue;
 		pid_t pid = pids[i];
-		char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
-		bzero(pathBuffer, PROC_PIDPATHINFO_MAXSIZE);
-		proc_pidpath(pid, pathBuffer, sizeof(pathBuffer));
 		// Match configuration
-		size_t icfg = config.MatchName(pathBuffer);
-		if(icfg != (size_t)-1)
+		StringArray argv;
+		if(GetArgv(argv, pid))
 		{
-			m_Samples[pid] = Sample(pid, pathBuffer);
-			m_Pid2Cfg[pid] = icfg;
+			size_t icfg = config.MatchName(argv);
+			if(icfg != (size_t)-1)
+			{
+				m_Samples[pid] = Sample(pid, argv);
+				m_Pid2Cfg[pid] = icfg;
+			}
 		}
 	}
+}
+
+
+bool SampleSet::GetArgv(StringArray &res, pid_t pid)
+{
+	typedef std::vector<uint8_t> Buffer_t;
+	try
+	{
+		res.clear();
+
+		int mib[3];
+
+		Buffer_t argsBuf;
+		int tries = 3;
+		int rv = 0;
+		size_t extra_add = 96;
+		do
+		{
+			size_t args_size_estimate;
+			mib[0] = CTL_KERN;
+			mib[1] = KERN_PROCARGS2;
+			mib[2] = pid;
+			rv = sysctl(mib, 3, NULL, &args_size_estimate, NULL, 0);
+			if (rv == -1)
+			{
+				Log(ERROR) << "System call failed with error code " << errno << " (pid=" << pid << ")\n";
+				return false;
+			}
+
+			/* Allocate space for the arguments. */
+			extra_add += 32;
+			size_t size = args_size_estimate + extra_add;
+			argsBuf.resize(size);
+
+			mib[0] = CTL_KERN;
+			mib[1] = KERN_PROCARGS2;
+			mib[2] = pid;
+
+			rv = sysctl(mib, 3, argsBuf.data(), &size, NULL, 0);
+			if (rv == -1
+				&& errno != EINVAL)
+			{
+				Log(ERROR) << "System call failed with error code " << errno << " (pid=" << pid << ")\n";
+				return false;
+			}
+		} while ((rv != 0) && tries--);
+		if (rv == -1)
+		{
+			char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
+			bzero(pathBuffer, PROC_PIDPATHINFO_MAXSIZE);
+			if(proc_pidpath(pid, pathBuffer, sizeof(pathBuffer)) == 0)
+			{
+				Log(ERROR) << "Call to proc_pidpath() failed with error code " << errno << " (pid=" << pid << ")\n";
+				return false;
+			}
+			res.push_back(pathBuffer);
+			return true;
+		}
+
+		/*
+		** Make a sysctl() call to get the raw argument space of the process.
+		** The layout is documented in start.s, which is part of the Csu
+		** project.  In summary, it looks like:
+		**
+		** /---------------\ 0x00000000
+		** :               :
+		** :               :
+		** |---------------|
+		** | argc          |
+		** |---------------|
+		** | arg[0]        |
+		** |---------------|
+		** :               :
+		** :               :
+		** |---------------|
+		** | arg[argc - 1] |
+		** |---------------|
+		** | 0             |
+		** |---------------|
+		** | env[0]        |
+		** |---------------|
+		** :               :
+		** :               :
+		** |---------------|
+		** | env[n]        |
+		** |---------------|
+		** | 0             |
+		** |---------------| <-- Beginning of data returned by sysctl() is here.
+		** | argc          |
+		** |---------------|
+		** | exec_path     |
+		** |:::::::::::::::|
+		** |               |
+		** | String area.  |
+		** |               |
+		** |---------------| <-- Top of stack.
+		** :               :
+		** :               :
+		** \---------------/ 0xffffffff
+		*/
+
+		const uint8_t * const procargs = argsBuf.data();
+		size_t nargs = *(uint32_t*)procargs;
+		const uint8_t *cp = procargs + sizeof(uint32_t);
+		const uint8_t *maxp = &argsBuf.back();
+
+		/* Skip the saved exec_path. */
+		while ((*cp != 0) && (cp < maxp))
+			++cp;
+		if (cp == maxp)
+		{
+			Log(ERROR) << "Failed to parse the process path\n";
+			return false;
+		}
+
+		/* Skip trailing '\0' characters. */
+		while ((*cp == 0) && (cp < maxp))
+			++cp;
+		if (cp >= maxp)
+		{
+			Log(ERROR) << "Failed to locate the first argument\n";
+			return false;
+		}
+		/*
+		** Iterate through the '\0'-terminated strings and convert '\0' to ' '
+		** until a string is found that has a '=' character in it (or there are
+		** no more strings in procargs).  There is no way to deterministically
+		** know where the command arguments end and the environment strings
+		** start, which is why the '=' character is searched for as a heuristic.
+		*/
+		while (res.size() < nargs)
+		{
+			if(cp >= maxp)
+			{
+				Log(ERROR) << "Buffer overflow while parsing arguments\n";
+				return false;
+			}
+			String s;
+			for (; *cp && cp < maxp; ++cp)
+				s += *cp;
+			res.push_back(s);
+			++cp;
+		}
+	}
+	catch(const std::exception& e)
+	{
+		Log(ERROR) << e.what() << '\n';
+		return false;
+	}
+	return true;
 }
 
 
@@ -300,7 +462,7 @@ bool SampleSet::ReadJsonRecord(const AppConfig &config)
 				return false;
 			}
 			// Map object
-			size_t icfg = config.MatchName(samp.m_Path.c_str());
+			size_t icfg = config.MatchName(samp.m_Argv);
 			if(icfg != (size_t)-1)
 			{
 				m_Samples[samp.m_Pid] = samp;

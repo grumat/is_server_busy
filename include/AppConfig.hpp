@@ -51,12 +51,14 @@ public:
 		: m_Name(o.m_Name)
 		, m_CPU(o.m_CPU)
 		, m_Disk(o.m_Disk)
+		, m_Argv(o.m_Argv)
 	{ }
 	~ProcessConfig() {}
 
 	grumat::String m_Name;
 	double m_CPU;
 	uint64_t m_Disk;
+	size_t m_Argv;
 
 	bool IsClear() const { return m_Name.empty(); }
 	void Clear()
@@ -64,6 +66,7 @@ public:
 		m_Name.Clear();
 		m_CPU = 0.0;
 		m_Disk = 0;
+		m_Argv = 0;
 	}
 	void Print(std::ostream &strm) const;
 };
@@ -75,7 +78,7 @@ public:
 	AppConfig();
 	bool Parse(const char *path);
 	void Print(std::ostream &strm) const;
-	size_t MatchName(const char *proc_name) const;
+	size_t MatchName(const grumat::StringArray &cmd_line) const;
 
 public:
 	grumat::Path m_RecordFile;

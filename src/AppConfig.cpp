@@ -234,6 +234,11 @@ bool AppConfig::Parse(const char *path)
 					if(!Get(cur_cfg.m_Disk, sect[i]))
 						return false;
 				}
+				else if(key == "ARGV")
+				{
+					if(!Get(cur_cfg.m_Argv, sect[i]))
+						return false;
+				}
 				else
 				{
 					Log(ERROR) << "(" << sect[i].line << "): Invalid configuration key '" << sect[i].key << "' found!\n";
@@ -249,6 +254,7 @@ bool AppConfig::Parse(const char *path)
 
 void ProcessConfig::Print(std::ostream &strm) const
 {
+	strm << "Argv: " << m_Argv << std::endl;
 	strm << "Name: " << m_Name << std::endl;
 	strm << "CPU: " << m_CPU << std::endl;
 	strm << "Disk: " << m_Disk << std::endl;
@@ -265,21 +271,29 @@ void AppConfig::Print(std::ostream &strm) const
 }
 
 
-size_t AppConfig::MatchName(const char *proc_name_p) const
+size_t AppConfig::MatchName(const StringArray &cmd_line) const
 {
 	// search by exact path first
 	for(size_t i = 0; i < m_Procs.size(); ++i)
 	{
-		if(m_Procs[i].m_Name == proc_name_p)
-			return i;
+		const size_t idx = m_Procs[i].m_Argv;
+		if(idx < cmd_line.size())
+		{
+			if(m_Procs[i].m_Name == cmd_line[idx])
+				return i;
+		}
 	}
-	// search by process name
-	Path proc_name(proc_name_p);
-	proc_name.StripToName();
 	for(size_t i = 0; i < m_Procs.size(); ++i)
 	{
-		if(m_Procs[i].m_Name == proc_name)
-			return i;
+		const size_t idx = m_Procs[i].m_Argv;
+		if(idx < cmd_line.size())
+		{
+			// search by process name
+			Path proc_name(cmd_line[idx]);
+			proc_name.StripToName();
+			if(m_Procs[i].m_Name == proc_name)
+				return i;
+		}
 	}
 	return -1;
 }

@@ -40,7 +40,7 @@ class Sample
 {
 public:
 	Sample();
-	Sample(pid_t pid, const char *path);
+	Sample(pid_t pid, const grumat::StringArray &cmd_line);
 	Sample(const Sample &o);
 	bool IsValid() const { return m_CpuTime != 0; }
 	void Print(std::ostream &strm, uint64_t tm_ticks) const;
@@ -55,7 +55,7 @@ public:
 
 public:
 	pid_t m_Pid;
-	std::string m_Path;
+	grumat::StringArray m_Argv;
 	uint64_t m_CpuTime;
 	uint64_t m_SysTime;
 	uint64_t m_DiskReadBytes;
@@ -76,6 +76,9 @@ public:
 	bool ReadJsonRecord(const AppConfig &config);
 
 	void Print(std::ostream &strm) const;
+
+protected:
+	bool GetArgv(grumat::StringArray &res, pid_t pid);
 
 public:
 	uint64_t m_Clock;
