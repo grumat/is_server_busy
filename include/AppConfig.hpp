@@ -50,14 +50,18 @@ public:
 	ProcessConfig(const ProcessConfig &o)
 		: m_Name(o.m_Name)
 		, m_CPU(o.m_CPU)
-		, m_Disk(o.m_Disk)
+		, m_DiskTotal(o.m_DiskTotal)
+		, m_DiskRead(o.m_DiskRead)
+		, m_DiskWrite(o.m_DiskWrite)
 		, m_Argv(o.m_Argv)
 	{ }
 	~ProcessConfig() {}
 
 	grumat::String m_Name;
 	double m_CPU;
-	uint64_t m_Disk;
+	uint64_t m_DiskTotal;
+	uint64_t m_DiskRead;
+	uint64_t m_DiskWrite;
 	size_t m_Argv;
 
 	bool IsClear() const { return m_Name.empty(); }
@@ -65,7 +69,9 @@ public:
 	{
 		m_Name.Clear();
 		m_CPU = 0.0;
-		m_Disk = 0;
+		m_DiskTotal = 0;
+		m_DiskRead = 0;
+		m_DiskWrite = 0;
 		m_Argv = 0;
 	}
 	void Print(std::ostream &strm) const;

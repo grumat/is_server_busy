@@ -221,47 +221,45 @@ bool SampleSet::GetArgv(StringArray &res, pid_t pid)
 
 		int mib[3];
 
-		Buffer_t argsBuf;
-		int tries = 3;
-		int rv = 0;
-		size_t extra_add = 96;
-		do
-		{
-			size_t args_size_estimate;
-			mib[0] = CTL_KERN;
-			mib[1] = KERN_PROCARGS2;
-			mib[2] = pid;
-			rv = sysctl(mib, 3, NULL, &args_size_estimate, NULL, 0);
-			if (rv == -1)
-			{
-				Log(ERROR) << "System call failed with error code " << errno << " (pid=" << pid << ")\n";
-				return false;
-			}
-
-			/* Allocate space for the arguments. */
-			extra_add += 32;
-			size_t size = args_size_estimate + extra_add;
-			argsBuf.resize(size);
-
-			mib[0] = CTL_KERN;
-			mib[1] = KERN_PROCARGS2;
-			mib[2] = pid;
-
-			rv = sysctl(mib, 3, argsBuf.data(), &size, NULL, 0);
-			if (rv == -1
-				&& errno != EINVAL)
-			{
-				Log(ERROR) << "System call failed with error code " << errno << " (pid=" << pid << ")\n";
-				return false;
-			}
-		} while ((rv != 0) && tries--);
+		size_t args_size_estimate = 0;
+		mib[0] = CTL_KERN;
+		mib[1] = KERN_ARGMAX;
+		mib[2] = 0;		//unused
+		// Get estimate buffer size
+		size_t bufsize = sizeof(args_size_estimate);
+		int rv = sysctl(mib, 2, &args_size_estimate, &bufsize, NULL, 0);
 		if (rv == -1)
 		{
+			Log(WARN) << "System call CTL_KERN/KERN_ARGMAX failed with error code " << errno << " (pid=" << pid << ")\n";
+			return false;
+		}
+
+		/* Allocate space for the arguments. */
+		Buffer_t argsBuf(args_size_estimate);
+
+		mib[0] = CTL_KERN;
+		mib[1] = KERN_PROCARGS2;
+		mib[2] = pid;
+
+		bufsize = argsBuf.size();
+		rv = sysctl(mib, 3, argsBuf.data(), &bufsize, NULL, 0);
+		if (rv == -1
+			&& errno != EINVAL)
+		{
+			if(errno != ESRCH)
+				Log(WARN) << "System call CTL_KERN/KERN_PROCARGS2 failed with error code " << errno << " (pid=" << pid << ")\n";
+			return false;
+		}
+		// Failure (privilege)
+		if (rv == -1)
+		{
+			// User has no privilege, only argv[0] can be retrieved
 			char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
 			bzero(pathBuffer, PROC_PIDPATHINFO_MAXSIZE);
 			if(proc_pidpath(pid, pathBuffer, sizeof(pathBuffer)) == 0)
 			{
-				Log(ERROR) << "Call to proc_pidpath() failed with error code " << errno << " (pid=" << pid << ")\n";
+				if(errno != ESRCH)
+					Log(WARN) << "Call to proc_pidpath() failed with error code " << errno << " (pid=" << pid << ")\n";
 				return false;
 			}
 			res.push_back(pathBuffer);
@@ -316,8 +314,9 @@ bool SampleSet::GetArgv(StringArray &res, pid_t pid)
 		const uint8_t *maxp = &argsBuf.back();
 
 		/* Skip the saved exec_path. */
+		String exe;
 		while ((*cp != 0) && (cp < maxp))
-			++cp;
+			exe += *cp++;
 		if (cp == maxp)
 		{
 			Log(ERROR) << "Failed to parse the process path\n";
@@ -325,8 +324,11 @@ bool SampleSet::GetArgv(StringArray &res, pid_t pid)
 		}
 
 		/* Skip trailing '\0' characters. */
-		while ((*cp == 0) && (cp < maxp))
+		do
+		{
 			++cp;
+		} while ((*cp == 0) && (cp < maxp));
+		
 		if (cp >= maxp)
 		{
 			Log(ERROR) << "Failed to locate the first argument\n";
@@ -349,7 +351,15 @@ bool SampleSet::GetArgv(StringArray &res, pid_t pid)
 			String s;
 			for (; *cp && cp < maxp; ++cp)
 				s += *cp;
-			res.push_back(s);
+			if(res.empty())
+			{
+				res.push_back(exe);
+				// Scripts such as Python may fix the argv0 to remove shebang
+				if(exe != s)
+					res.push_back(s);
+			}
+			else
+				res.push_back(s);
 			++cp;
 		}
 	}

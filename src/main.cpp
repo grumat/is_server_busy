@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
 	SampleSet old_samps;
 	LogDebug() << "Loading previous record\n";
 	bool ok = old_samps.ReadJsonRecord(config);
-	LogDebug() << "ReadJsonRecord returned" << ok << std::endl;
+	LogDebug() << "ReadJsonRecord returned " << ok << std::endl;
 	if (ok && log_debug_)
 	{
 		Log(DEBUG) << "**Previous workload record**\n";
@@ -266,9 +266,15 @@ int main(int argc, char *argv[])
 		return ACTIVE_STATE;
 	}
 	// X s = X * 10ˆ9 ns
-	uint64_t time_diff = (samps.m_Clock - old_samps.m_Clock);
+	const uint64_t time_diff = (samps.m_Clock - old_samps.m_Clock);
 	LogDebug() << "Time difference: " << time_diff / 1000000 << " ms\n";
-	if (time_diff > (config.m_IntervalThr * 1000000000ULL))
+	const uint64_t secs = time_diff / 1000000000ULL;
+	if(secs == 0)
+	{
+		Log(WARN) << "Can't determine idle state. History is too recent (< 1s)\n";
+		return ACTIVE_STATE;
+	}
+	if (secs > config.m_IntervalThr)
 	{
 		Log(WARN) << "Can't determine idle state. History is more than " << config.m_IntervalThr << " s...\n";
 		return ACTIVE_STATE;
@@ -292,27 +298,51 @@ int main(int argc, char *argv[])
 		else
 			m[icfg] += dif;
 	}
+	//
+	#define RET_ACTIVE(cond, ...)						\
+	{													\
+		if(cond)										\
+		{												\
+			Log(INFO) << __VA_ARGS__					\
+				<< " Server activity confirmed...\n";	\
+			if (log_debug_) 							\
+				retcode = ACTIVE_STATE;					\
+			else										\
+				return ACTIVE_STATE;					\
+		}												\
+		else if (log_debug_)							\
+			Log(DEBUG) << __VA_ARGS__ << '\n';			\
+	}
+	//
+	int retcode = IDLE_STATE;
 	// Verify if computed process load overflows thresholds
 	LogDebug() << "Comparing workload thresholds\n";
 	for (DiffMap_t::const_iterator it = m.begin(); it != m.end(); ++it)
 	{
 		const ProcessConfig &pcfg = config.m_Procs[it->first];
 		double cpu = it->second.GetRelativeTime(time_diff);
-		if (cpu > pcfg.m_CPU)
-		{
-			Log(INFO) << "Service '" << pcfg.m_Name << "' is using " << format_n("%3.1f%%", cpu) << " CPU! Server activity confirmed...\n";
-			return ACTIVE_STATE;
-		}
-		LogDebug() << "Service '" << pcfg.m_Name << "' is using " << format_n("%3.1f%%", cpu) << " CPU!\n";
+		RET_ACTIVE((cpu > pcfg.m_CPU), "Service '" << pcfg.m_Name << "' is using " << format_n("%3.1f%%", cpu));
 		//
-		int64_t bytes = it->second.GetTotalDiskBytes();
-		if (bytes > (int64_t)pcfg.m_Disk)
+		if(pcfg.m_DiskTotal)
 		{
-			Log(INFO) << "Service '" << pcfg.m_Name << "' transferred " << bytes << " Disk bytes! Server activity confirmed...\n";
-			return ACTIVE_STATE;
+			int64_t bytes = it->second.GetTotalDiskBytes() / secs;
+			RET_ACTIVE((bytes > (int64_t)pcfg.m_DiskTotal), "Service '" << pcfg.m_Name << "' transferred " << bytes << " disk bytes/s!");
 		}
-		LogDebug() << "Service '" << pcfg.m_Name << "' transferred " << bytes << " Disk bytes!\n";
+		//
+		if(pcfg.m_DiskRead)
+		{
+			int64_t bytes = it->second.m_DiskReadBytes / secs;
+			RET_ACTIVE((bytes > (int64_t)pcfg.m_DiskRead), "Service '" << pcfg.m_Name << "' read " << bytes << " disk bytes/s!");
+		}
+		//
+		if(pcfg.m_DiskWrite)
+		{
+			int64_t bytes = it->second.m_DiskWriteBytes / secs;
+			RET_ACTIVE((bytes > (int64_t)pcfg.m_DiskWrite), "Service '" << pcfg.m_Name << "' wrote " << bytes << " disk bytes/s!");
+		}
 	}
-	Log(INFO) << "No listed service has significant workload. Server is allowed to shutdown...\n";
-	return IDLE_STATE;
+	if(retcode == IDLE_STATE)
+		Log(INFO) << "No listed service has significant workload. Server is allowed to shutdown...\n";
+	#undef RET_ACTIVE
+	return retcode;
 }

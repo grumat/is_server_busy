@@ -231,7 +231,17 @@ bool AppConfig::Parse(const char *path)
 				}
 				else if(key == "DISK")
 				{
-					if(!Get(cur_cfg.m_Disk, sect[i]))
+					if(!Get(cur_cfg.m_DiskTotal, sect[i]))
+						return false;
+				}
+				else if(key == "READ")
+				{
+					if(!Get(cur_cfg.m_DiskRead, sect[i]))
+						return false;
+				}
+				else if(key == "WRITE")
+				{
+					if(!Get(cur_cfg.m_DiskWrite, sect[i]))
 						return false;
 				}
 				else if(key == "ARGV")
@@ -257,7 +267,9 @@ void ProcessConfig::Print(std::ostream &strm) const
 	strm << "Argv: " << m_Argv << std::endl;
 	strm << "Name: " << m_Name << std::endl;
 	strm << "CPU: " << m_CPU << std::endl;
-	strm << "Disk: " << m_Disk << std::endl;
+	strm << "Disk Total: " << m_DiskTotal << std::endl;
+	strm << "Disk Read: " << m_DiskRead << std::endl;
+	strm << "Disk Write: " << m_DiskWrite << std::endl;
 }
 
 

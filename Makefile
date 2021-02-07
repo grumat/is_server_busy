@@ -8,7 +8,7 @@ CXX = /Applications/Xcode.app/Contents/Developer/usr/bin/g++
 #CXX = /usr/bin/g++
 
 # define any compile-time flags
-CXXFLAGS	:= -std=c++17 -Wall -Wextra -g -O0
+CXXFLAGS	:= -std=c++17 -Wall -Wextra -g -O2
 
 # define library paths in addition to /usr/lib
 #   if I wanted to include libraries not in /usr/lib I'd specify
@@ -118,7 +118,8 @@ FORCE:
 clean:
 	$(RM) $(OUTPUTMAIN)
 	$(RM) $(call FIXPATH,$(OBJECTS))
-	$(RM) src/*.d
+	$(RM) .deps/*.d
+	$(RM) include/*.gch
 	@echo Cleanup complete!
 
 run: all
